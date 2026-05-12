@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>select scrollbar repro</title>
+  <style>
+    :root {
+      --panel-bg: #f5f5f5;
+      --border: #ddd;
+      --warn: #c0392b;
+      --ok: #2c7a3f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 4000px;
+    }
+
+    .panel {
+      position: sticky;
+      top: 0;
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 24px;
+    }
+
+    .panel .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .panel input[type="range"] { flex: 1; }
+    .panel .val { width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    .metrics {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px 16px;
+      font-size: 12px;
+      color: #333;
+    }
+
+    .metrics .k { color: #777; }
+    .metrics .v { font-variant-numeric: tabular-nums; }
+
+    .prediction {
+      grid-column: 1 / -1;
+      font-size: 13px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      background: #fff;
+      border: 1px solid var(--border);
+    }
+    .prediction.warn { color: var(--warn); border-color: var(--warn); }
+    .prediction.ok   { color: var(--ok);   border-color: var(--ok); }
+
+    .stage {
+      position: relative;
+      padding: 16px;
+    }
+
+    .ruler {
+      position: fixed;
+      left: 0;
+      right: 0;
+      pointer-events: none;
+      border-top: 1px dashed rgba(0, 0, 0, 0.2);
+      font-size: 10px;
+      color: #999;
+      padding-left: 4px;
+    }
+
+    #target-wrap {
+      will-change: transform;
+    }
+
+    #target {
+      font-size: 14px;
+    }
+
+    /* 行高計測用の隠し select */
+    .measure {
+      position: absolute;
+      visibility: hidden;
+      pointer-events: none;
+      left: -9999px;
+      top: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="row">
+      <label for="count">option 数</label>
+      <input type="range" id="count" min="1" max="200" value="20">
+      <span class="val" id="count-val">20</span>
+    </div>
+
+    <div class="row">
+      <label for="offset">Y オフセット</label>
+      <input type="range" id="offset" min="0" max="2000" value="100">
+      <span class="val" id="offset-val">100</span>
+    </div>
+
+    <div class="row">
+      <label for="label-len">ラベル長</label>
+      <select id="label-len">
+        <option value="short" selected>短い (e.g. 2026)</option>
+        <option value="long">長い (e.g. 2026 - sample label ...)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="size-attr">size 属性</label>
+      <input type="number" id="size-attr" min="0" max="50" value="0" style="width: 60px;">
+      <span style="font-size: 11px; color: #777;">0 = 未指定 (ドロップダウン)</span>
+    </div>
+
+    <div class="metrics">
+      <div><span class="k">viewport h:</span> <span class="v" id="m-vh">-</span></div>
+      <div><span class="k">select top:</span> <span class="v" id="m-top">-</span></div>
+      <div><span class="k">select bottom:</span> <span class="v" id="m-bottom">-</span></div>
+      <div><span class="k">行高 (実測):</span> <span class="v" id="m-row">-</span></div>
+      <div><span class="k">上スペース:</span> <span class="v" id="m-above">-</span></div>
+      <div><span class="k">下スペース:</span> <span class="v" id="m-below">-</span></div>
+      <div><span class="k">全項目高:</span> <span class="v" id="m-total">-</span></div>
+      <div><span class="k">広い側:</span> <span class="v" id="m-side">-</span></div>
+    </div>
+
+    <div class="prediction" id="prediction">-</div>
+  </div>
+
+  <div class="stage">
+    <div id="target-wrap">
+      <select id="target"></select>
+    </div>
+
+    <!-- 行高を測るための隠し select。1 option vs 2 options の差で 1 行分の高さを得る -->
+    <select class="measure" id="measure1" size="1"><option>x</option></select>
+    <select class="measure" id="measure2" size="2"><option>x</option><option>x</option></select>
+  </div>
+
+  <script>
+    const $count = document.getElementById("count");
+    const $countVal = document.getElementById("count-val");
+    const $offset = document.getElementById("offset");
+    const $offsetVal = document.getElementById("offset-val");
+    const $labelLen = document.getElementById("label-len");
+    const $sizeAttr = document.getElementById("size-attr");
+    const $target = document.getElementById("target");
+    const $wrap = document.getElementById("target-wrap");
+
+    const $mVh = document.getElementById("m-vh");
+    const $mTop = document.getElementById("m-top");
+    const $mBottom = document.getElementById("m-bottom");
+    const $mRow = document.getElementById("m-row");
+    const $mAbove = document.getElementById("m-above");
+    const $mBelow = document.getElementById("m-below");
+    const $mTotal = document.getElementById("m-total");
+    const $mSide = document.getElementById("m-side");
+    const $prediction = document.getElementById("prediction");
+
+    function buildOptions() {
+      const n = Number($count.value);
+      const long = $labelLen.value === "long";
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < n; i++) {
+        const opt = document.createElement("option");
+        const base = String(2000 + i);
+        opt.textContent = long
+          ? base + " - sample label for measuring layout " + i
+          : base;
+        frag.appendChild(opt);
+      }
+      $target.replaceChildren(frag);
+
+      const size = Number($sizeAttr.value);
+      if (size > 0) {
+        $target.size = size;
+      } else {
+        $target.removeAttribute("size");
+      }
+    }
+
+    function applyOffset() {
+      $wrap.style.transform = `translateY(${$offset.value}px)`;
+    }
+
+    function measureRowHeight() {
+      // 2-option size=2 と 1-option size=1 の差で 1 行分の高さを推定
+      const h1 = document.getElementById("measure1").getBoundingClientRect().height;
+      const h2 = document.getElementById("measure2").getBoundingClientRect().height;
+      const row = Math.max(h2 - h1, 0);
+      // フォールバック: 行高が取れない場合は h1 を使う
+      return row > 0 ? row : h1;
+    }
+
+    function updateMetrics() {
+      const vh = window.innerHeight;
+      const rect = $target.getBoundingClientRect();
+      const rowH = measureRowHeight();
+      const total = rowH * Number($count.value);
+      const above = rect.top;
+      const below = vh - rect.bottom;
+      const side = below >= above ? "下" : "上";
+      const sideSpace = Math.max(below, above);
+
+      $mVh.textContent = `${vh}px`;
+      $mTop.textContent = `${rect.top.toFixed(0)}px`;
+      $mBottom.textContent = `${rect.bottom.toFixed(0)}px`;
+      $mRow.textContent = `${rowH.toFixed(2)}px`;
+      $mAbove.textContent = `${above.toFixed(0)}px`;
+      $mBelow.textContent = `${below.toFixed(0)}px`;
+      $mTotal.textContent = `${total.toFixed(0)}px (${$count.value} × ${rowH.toFixed(1)})`;
+      $mSide.textContent = `${side} (${sideSpace.toFixed(0)}px)`;
+
+      // ざっくり予測: 全項目高さが「広い側のスペース」に収まらなければスクロールが出る見込み
+      // 実際は Chromium 内部の max-height 制限もあるため目安。
+      const willScroll = total > sideSpace;
+      $prediction.textContent = willScroll
+        ? `予測: スクロールバーが出る (全項目 ${total.toFixed(0)}px > ${side}スペース ${sideSpace.toFixed(0)}px)`
+        : `予測: スクロールバーは出ない (全項目 ${total.toFixed(0)}px ≦ ${side}スペース ${sideSpace.toFixed(0)}px)`;
+      $prediction.classList.toggle("warn", willScroll);
+      $prediction.classList.toggle("ok", !willScroll);
+    }
+
+    let raf = 0;
+    function scheduleUpdate() {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateMetrics);
+    }
+
+    $count.addEventListener("input", () => {
+      $countVal.textContent = $count.value;
+      buildOptions();
+      scheduleUpdate();
+    });
+    $offset.addEventListener("input", () => {
+      $offsetVal.textContent = $offset.value;
+      applyOffset();
+      scheduleUpdate();
+    });
+    $labelLen.addEventListener("change", () => {
+      buildOptions();
+      scheduleUpdate();
+    });
+    $sizeAttr.addEventListener("input", () => {
+      buildOptions();
+      scheduleUpdate();
+    });
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+
+    // 初期化
+    buildOptions();
+    applyOffset();
+    updateMetrics();
+  </script>
+</body>
+</html>
