@@ -12,23 +12,59 @@
       font-family: sans-serif;
       padding: 20px;
     }
+
+    .controls {
+      margin-bottom: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .controls label {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .controls input[type="number"] {
+      width: 80px;
+    }
   </style>
 </head>
 <body>
+  <div class="controls">
+    <label>開始年 <input type="number" id="year-from" value="2016"></label>
+    <label>終了年 <input type="number" id="year-to" value="2099"></label>
+  </div>
+
   <input type="text" id="datepicker">
 
   <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
   <script src="https://code.jquery.com/ui/1.14.2/jquery-ui.min.js"></script>
   <script>
     $(function () {
-      $("#datepicker").datepicker({
+      const $picker = $("#datepicker");
+      const $from = $("#year-from");
+      const $to = $("#year-to");
+
+      function applyYearRange() {
+        const from = $from.val();
+        const to = $to.val();
+        $picker.datepicker("option", "yearRange", from + ":" + to);
+        $picker.datepicker("show");
+      }
+
+      $picker.datepicker({
         changeYear: true,
         changeMonth: true,
-        yearRange: "2016:2099",
+        yearRange: $from.val() + ":" + $to.val(),
         dateFormat: "yy/mm/dd"
       });
 
-      $("#datepicker").datepicker("show");
+      $from.on("change", applyYearRange);
+      $to.on("change", applyYearRange);
+
+      $picker.datepicker("show");
     });
   </script>
 </body>
