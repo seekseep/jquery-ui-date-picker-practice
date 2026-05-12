@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>jQuery UI Datepicker Scroll Repro</title>
+
+  <link rel="stylesheet"
+        href="https://code.jquery.com/ui/1.14.2/themes/base/jquery-ui.css">
+
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
+    /* 年セレクトを画像のように開いた時、高さ制限でスクロールバーが出る状態に寄せる */
+    .ui-datepicker select.ui-datepicker-year {
+      width: 70px;
+    }
+
+    .ui-datepicker select.ui-datepicker-month {
+      width: 60px;
+    }
+  </style>
+</head>
+<body>
+  <input type="text" id="datepicker">
+
+  <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.14.2/jquery-ui.min.js"></script>
+  <script>
+    $(function () {
+      $("#datepicker").datepicker({
+        changeYear: true,
+        changeMonth: true,
+        yearRange: "2016:2035",
+        dateFormat: "yy/mm/dd"
+      });
+
+      $("#datepicker").datepicker("show");
+    });
+  </script>
+</body>
+</html>
